@@ -1,0 +1,3 @@
+FROM mariadb:latest
+EXPOSE 3306 33060 4567/tcp 4567/udp 4568/tcp 4444/tcp
+CMD ["mysqld", "--wsrep-new-cluster"]

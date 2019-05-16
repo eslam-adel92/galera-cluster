@@ -1,0 +1,50 @@
+FROM ubuntu:16.04
+#ENV VERSION 20170605
+#ENV DEBIAN_FRONTEND noninteractive
+
+#COPY galera.list /etc/apt/sources.list.d/galera.list
+#COPY galera.pref /etc/apt/preferences.d/galera.pref
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+# for MYSQL_RANDOM_ROOT_PASSWORD
+                pwgen \
+# for mysql_ssl_rsa_setup
+                openssl \
+# FATAL ERROR: please install the following Perl modules before executing /usr/local/mysql/scripts/mysql_install_db:
+# File::Basename
+# File::Copy
+# Sys::Hostname
+# Data::Dumper
+                perl \
+        && rm -rf /var/lib/apt/lists/*
+RUN { \
+                echo mysql-community-server mysql-community-server/data-dir select ''; \
+                echo mysql-community-server mysql-community-server/root-pass password ''; \
+                echo mysql-community-server mysql-community-server/re-root-pass password ''; \
+                echo mysql-community-server mysql-community-server/remove-test-db select false; \
+        } | debconf-set-selections
+
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 BC19DDBA && \
+   # add-apt-repository 'deb http://releases.galeracluster.com/ubuntu xenial main' && \
+    add-apt-repository 'deb http://releases.galeracluster.com/mysql-wsrep-5.7/ubuntu xenial main' && \
+    add-apt-repository 'deb http://releases.galeracluster.com/galera-3/ubuntu xenial main' && \
+    debconf-set-selections <<< 'mysql-server mysql-server/root_password password test'
+    debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password test'
+    apt-get update && \
+    apt-get install -y galera-3 galera-arbitrator-3 mysql-wsrep-5.7 rsync lsof
+RUN rm -r /var/lib/mysql
+
+
+# COPY my.cnf /etc/mysql/my.cnf
+
+
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN ln -s usr/local/bin/docker-entrypoint.sh /entrypoint.sh # backwards compat
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+
+EXPOSE 3306/tcp 4567/tcp 4567/udp 4568/tcp 4444/tcp
+CMD ["mysqld"]
+#LABEL mysql_verion=5.6.35

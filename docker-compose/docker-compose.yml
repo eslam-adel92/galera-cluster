@@ -1,0 +1,58 @@
+version: '3'
+services:
+  node0:
+    build:
+      context: .
+      dockerfile: master-dockerfile
+    container_name: node0
+    image: galera-master
+    volumes:
+       - ./data0:/var/lib/mysql
+       - ./node0.cnf:/etc/mysql/my.cnf
+    environment:
+       - MYSQL_ROOT_PASSWORD=1234
+       - MYSQL_USER=galera
+       - MYSQL_PASSWORD=1234
+       - MYSQL_DATABASE=galera
+    #entrypoint: docker-entrypoint.sh mysqld --wsrep-new-cluster
+    restart: always
+
+  node1:
+    build:
+      context: .
+      dockerfile: node-dockerfile
+    container_name: node1
+    image: galera-node
+    volumes:
+       - ./data1:/var/lib/mysql
+       - ./node1.cnf:/etc/mysql/my.cnf
+      #  - ./nodes-entrypoint.sh:/nodes-entrypoint.sh
+    environment:
+       - MYSQL_ROOT_PASSWORD=1234
+       - MYSQL_USER=galera
+       - MYSQL_PASSWORD=1234
+       - MYSQL_DATABASE=galera
+    depends_on: 
+       - node0
+    # entrypoint: /nodes-entrypoint.sh
+    restart: always
+
+  node2:
+    build:
+      context: .
+      dockerfile: node-dockerfile
+    container_name: node2
+    image: galera-node
+    volumes:
+       - ./data2:/var/lib/mysql
+       - ./node2.cnf:/etc/mysql/my.cnf
+      #  - ./nodes-entrypoint.sh:/nodes-entrypoint.sh
+    environment:
+       - MYSQL_ROOT_PASSWORD=1234
+       - MYSQL_USER=galera
+       - MYSQL_PASSWORD=1234
+       - MYSQL_DATABASE=galera
+    depends_on: 
+       - node0
+    # entrypoint: /nodes-entrypoint.sh
+    restart: always
