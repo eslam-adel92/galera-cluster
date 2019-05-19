@@ -1,7 +1,7 @@
 #!/bin/bash
 docker-entrypoint.sh mysqld
 RESULT=`echo $?`
-sleep 50
+##sleep 50
 VALUE=`mysql -u root -p${MYSQL_PASSWORD} -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';" | awk 'FNR == 2 {print $2}'`
 
 if [[ RESULT -ne '0' || "$VALUE" == "OFF" ]]
