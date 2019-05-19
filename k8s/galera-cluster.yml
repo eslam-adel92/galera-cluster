@@ -1,4 +1,60 @@
 # This is galera cluster file
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: galera-init
+spec:
+  template:
+    metadata:
+      name: galera-init
+      labels:
+        app: galera
+    spec:
+      containers:
+      - name: galera-init
+        image: mariadb:latest
+        command: ["bash"]
+        args: ["-c",  "docker-entrypoint.sh mysqld --wsrep-new-cluster && sleep 100"]
+        ports:
+        - containerPort: 3306
+          name: mysql-port
+        - containerPort: 4567
+          name: galera-port
+        - containerPort: 4567
+          name: galera-port-udp        
+          protocol: UDP 
+        - containerPort: 4568
+          name: inc-state
+        - containerPort: 4444
+          name: state-snapshot
+        resources:
+          limits:
+            cpu: "500m"
+            memory: 1Gi
+          requests:
+           cpu: "500m"
+           memory: 1Gi
+        env:
+          - name: MYSQL_ROOT_PASSWORD
+            value: R00t_10
+          - name: MYSQL_USER
+            value: galera
+          - name: MYSQL_PASSWORD
+            value: R00t_10
+          - name: MYSQL_DATABASE
+            value: galera
+        volumeMounts:
+        - name: galera-config-vol
+          mountPath: /etc/mysql/conf.d
+      volumes:
+      - name: galera-config-vol
+        configMap:
+          name: galera-config
+          items:
+          - key: config
+            path: galera.cnf
+      restartPolicy: Never
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -7,7 +63,7 @@ metadata:
     app: galera
 spec:
   serviceName: galera
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: galera
@@ -16,10 +72,10 @@ spec:
       labels:
         app: galera
     spec:
-      terminationGracePeriodSeconds: 1800
       containers:
       - name: galera
-        image: gcr.io/google-samples/galera:v13
+        image: mariadb:latest
+        # command: ['sh', '-c', 'docker-entrypoint.sh mysqld --wsrep-new-cluster']
         imagePullPolicy: Always
         ports:
         - containerPort: 3306
@@ -27,12 +83,12 @@ spec:
         - containerPort: 4567
           name: galera-port
         - containerPort: 4567
-          name: galera-port         
+          name: galera-port-udp        
           protocol: UDP 
         - containerPort: 4568
-          name: incremental-state-transfer-port
+          name: inc-state
         - containerPort: 4444
-          name: state-snapshot-transfer-port
+          name: state-snapshot
         resources:
           limits:
             cpu: "500m"
@@ -40,51 +96,29 @@ spec:
           requests:
            cpu: "500m"
            memory: 1Gi
-        # securityContext:
-        #   capabilities:
-        #     add:
-        #       - IPC_LOCK
-        # lifecycle:
-        #   preStop:
-        #     exec:
-        #       command: 
-        #       - /bin/sh
-        #       - -c
-        #       - nodetool drain
         env:
-          - name: MAX_HEAP_SIZE
-            value: 512M
-          - name: HEAP_NEWSIZE
-            value: 100M
-          - name: CASSANDRA_SEEDS
-            value: "galera-0.galera.default.svc.cluster.local"
-          - name: CASSANDRA_CLUSTER_NAME
-            value: "K8Demo"
-          - name: CASSANDRA_DC
-            value: "DC1-K8Demo"
-          - name: CASSANDRA_RACK
-            value: "Rack1-K8Demo"
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
-        # readinessProbe:
-        #   exec:
-        #     command:
-        #     - /bin/bash
-        #     - -c
-        #     - /ready-probe.sh
-        #   initialDelaySeconds: 15
-        #   timeoutSeconds: 5
-        # These volume mounts are persistent. They are like inline claims,
-        # but not exactly because the names need to match exactly one of
-        # the stateful pod volumes.
+          - name: MYSQL_ROOT_PASSWORD
+            value: R00t_10
+          - name: MYSQL_USER
+            value: galera
+          - name: MYSQL_PASSWORD
+            value: R00t_10
+          - name: MYSQL_DATABASE
+            value: galera
         volumeMounts:
         - name: galera-data
           mountPath: /galera_data
-  # These are converted to volume claims by the controller
-  # and mounted at the paths mentioned above.
-  # do not use these in production until ssd GCEPersistentDisk or other ssd pd
+        - name: galera-config-vol
+          mountPath: /etc/mysql/conf.d
+
+      volumes:
+      - name: galera-config-vol
+        configMap:
+          name: galera-config
+          items:
+          - key: config
+            path: galera.cnf
+
   volumeClaimTemplates:
   - metadata:
       name: galera-data
@@ -94,25 +128,87 @@ spec:
       resources:
         requests:
           storage: 2Gi
+
+#######################################################
 ---
-kind: StorageClass
 apiVersion: storage.k8s.io/v1beta1
+kind: StorageClass
 metadata:
   name: standard
 provisioner: kubernetes.io/gce-pd
 parameters:
   type: pd-standard
-  zone: us-central1-a	
+  zone: us-central1-a
+#######################################################
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
     app: galera
-  name: galera
+  name: mysql
 spec:
-  clusterIP: None
-  ports:
-  - port: 3306
   selector:
     app: galera
+  ports:
+  - name: mysql-port  
+    port: 3306
+    targetPort: 3306
+#######################################################
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: galera 
+  name: galera-cluster
+spec:
+  selector:
+    app: galera
+  ports:
+  - name: galera-port
+    protocol: TCP
+    port: 4567
+  - name: galera-port-udp
+    protocol: UDP
+    port: 4567
+    targetPort: 4567
+  - name: inc-state
+    protocol: TCP
+    port: 4568
+    targetPort: 4568
+  - name: state-snapshot
+    protocol: TCP
+    port: 4444
+    targetPort: 4444
+#######################################################
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: galera-config
+  labels:
+    app: galera
+data:
+  config : |
+    [mysqld]
+    binlog_format=ROW
+    default-storage-engine=innodb
+    innodb_autoinc_lock_mode=2
+    bind-address=0.0.0.0
+
+    # Galera Provider Configuration
+    wsrep_on=ON
+    wsrep_provider=/usr/lib/galera/libgalera_smm.so
+
+    # Galera Cluster Configuration
+    wsrep_cluster_name="galera_cluster"
+    wsrep_cluster_address="gcomm://galera-cluster"
+
+    # Galera Synchronization Configuration
+    wsrep_sst_method=rsync
+
+    # Galera Node Configuration
+    # wsrep_node_address="node0"
+    # wsrep_node_name="node0"
+#######################################################
