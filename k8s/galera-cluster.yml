@@ -84,7 +84,7 @@ metadata:
     app: galera
 spec:
   serviceName: galera
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: galera
@@ -141,11 +141,14 @@ spec:
         readinessProbe:
           exec:
             command:
-            - /readiness.sh
+            - bash
+            - "-c"
+            - set -ex
+              /readiness.sh
             # - /bin/bash /usr/bin/mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
             # - -c
             # - set -ex
-              # /usr/bin/mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
+            #   /usr/bin/mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
           initialDelaySeconds: 50
           periodSeconds: 20
           timeoutSeconds: 100
