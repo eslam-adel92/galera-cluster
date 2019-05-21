@@ -1,59 +1,80 @@
 # This is galera cluster file
-apiVersion: batch/v1
-kind: Job
+---
+apiVersion: v1
+kind: Service
 metadata:
-  name: galera-init
+  labels:
+    app: galera
+  name: mysql
 spec:
-  template:
-    metadata:
-      name: galera-init
-      labels:
-        app: galera
-    spec:
-      containers:
-      - name: galera-init
-        image: mariadb:latest
-        command: ["bash"]
-        args: ["-c",  "docker-entrypoint.sh mysqld --wsrep-new-cluster && sleep 100"]
-        ports:
-        - containerPort: 3306
-          name: mysql-port
-        - containerPort: 4567
-          name: galera-port
-        - containerPort: 4567
-          name: galera-port-udp        
-          protocol: UDP 
-        - containerPort: 4568
-          name: inc-state
-        - containerPort: 4444
-          name: state-snapshot
-        resources:
-          limits:
-            cpu: "500m"
-            memory: 1Gi
-          requests:
-           cpu: "500m"
-           memory: 1Gi
-        env:
-          - name: MYSQL_ROOT_PASSWORD
-            value: R00t_10
-          - name: MYSQL_USER
-            value: galera
-          - name: MYSQL_PASSWORD
-            value: R00t_10
-          - name: MYSQL_DATABASE
-            value: galera
-        volumeMounts:
-        - name: galera-config-vol
-          mountPath: /etc/mysql/conf.d
-      volumes:
-      - name: galera-config-vol
-        configMap:
-          name: galera-config
-          items:
-          - key: config
-            path: galera.cnf
-      restartPolicy: Never
+  selector:
+    app: galera
+  ports:
+  - name: mysql-port  
+    port: 3306
+#######################################################
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: galera 
+  name: galera-cluster
+spec:
+  selector:
+    app: galera
+  ports:
+  - name: galera-port
+    port: 4567
+  - name: galera-port-udp
+    protocol: UDP
+    port: 4567
+    targetPort: 4567
+  - name: inc-state
+    port: 4568
+  - name: state-snapshot
+    port: 4444
+#######################################################
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: galera-config
+  labels:
+    app: galera
+data:
+  config : |
+    [mysqld]
+    binlog_format=ROW
+    default-storage-engine=innodb
+    innodb_autoinc_lock_mode=2
+    bind-address=0.0.0.0
+
+    # Galera Provider Configuration
+    wsrep_on=ON
+    wsrep_provider=/usr/lib/galera/libgalera_smm.so
+
+    # Galera Cluster Configuration
+    wsrep_cluster_name="galera_cluster"
+    wsrep_cluster_address="gcomm://galera-cluster"
+
+    # Galera Synchronization Configuration
+    wsrep_sst_method=rsync
+
+    # Galera Node Configuration
+    # wsrep_node_address="node0"
+    # wsrep_node_name="node0"
+#######################################################
+---
+apiVersion: storage.k8s.io/v1beta1
+kind: StorageClass
+metadata:
+  name: standard
+provisioner: kubernetes.io/gce-pd
+parameters:
+  type: pd-standard
+  zone: us-central1-a
+#######################################################
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -74,8 +95,7 @@ spec:
     spec:
       containers:
       - name: galera
-        image: mariadb:latest
-        # command: ['sh', '-c', 'docker-entrypoint.sh mysqld --wsrep-new-cluster']
+        image: eslam2017/galera
         imagePullPolicy: Always
         ports:
         - containerPort: 3306
@@ -110,7 +130,26 @@ spec:
           mountPath: /galera_data
         - name: galera-config-vol
           mountPath: /etc/mysql/conf.d
-
+        livenessProbe:
+          exec:
+            command: ["mysqladmin", "ping"]
+          initialDelaySeconds: 50
+          periodSeconds: 20
+          timeoutSeconds: 100
+          successThreshold: 2
+          failureThreshold: 10
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - "-c"
+            - set -ex
+              mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
+          initialDelaySeconds: 50
+          periodSeconds: 20
+          timeoutSeconds: 100
+          successThreshold: 2
+          failureThreshold: 10
       volumes:
       - name: galera-config-vol
         configMap:
@@ -129,86 +168,4 @@ spec:
         requests:
           storage: 2Gi
 
-#######################################################
----
-apiVersion: storage.k8s.io/v1beta1
-kind: StorageClass
-metadata:
-  name: standard
-provisioner: kubernetes.io/gce-pd
-parameters:
-  type: pd-standard
-  zone: us-central1-a
-#######################################################
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: galera
-  name: mysql
-spec:
-  selector:
-    app: galera
-  ports:
-  - name: mysql-port  
-    port: 3306
-    targetPort: 3306
-#######################################################
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: galera 
-  name: galera-cluster
-spec:
-  selector:
-    app: galera
-  ports:
-  - name: galera-port
-    protocol: TCP
-    port: 4567
-  - name: galera-port-udp
-    protocol: UDP
-    port: 4567
-    targetPort: 4567
-  - name: inc-state
-    protocol: TCP
-    port: 4568
-    targetPort: 4568
-  - name: state-snapshot
-    protocol: TCP
-    port: 4444
-    targetPort: 4444
-#######################################################
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: galera-config
-  labels:
-    app: galera
-data:
-  config : |
-    [mysqld]
-    binlog_format=ROW
-    default-storage-engine=innodb
-    innodb_autoinc_lock_mode=2
-    bind-address=0.0.0.0
-
-    # Galera Provider Configuration
-    wsrep_on=ON
-    wsrep_provider=/usr/lib/galera/libgalera_smm.so
-
-    # Galera Cluster Configuration
-    wsrep_cluster_name="galera_cluster"
-    wsrep_cluster_address="gcomm://galera-cluster"
-
-    # Galera Synchronization Configuration
-    wsrep_sst_method=rsync
-
-    # Galera Node Configuration
-    # wsrep_node_address="node0"
-    # wsrep_node_name="node0"
 #######################################################
