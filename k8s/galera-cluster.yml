@@ -136,15 +136,16 @@ spec:
           initialDelaySeconds: 50
           periodSeconds: 20
           timeoutSeconds: 100
-          successThreshold: 2
+          successThreshold: 1
           failureThreshold: 10
         readinessProbe:
           exec:
             command:
-            - bash
-            - "-c"
-            - set -ex
-              mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
+            - /readiness.sh
+            # - /bin/bash /usr/bin/mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
+            # - -c
+            # - set -ex
+              # /usr/bin/mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
           initialDelaySeconds: 50
           periodSeconds: 20
           timeoutSeconds: 100
