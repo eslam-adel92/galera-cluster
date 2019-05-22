@@ -58,8 +58,8 @@ data:
 
     # Galera Cluster Configuration
     wsrep_cluster_name="galera_cluster"
-    # wsrep_cluster_address="gcomm://galera-cluster"
-    wsrep_cluster_address="gcomm://galera-0:4567,galera-1:4567,galera-2:4567"
+    wsrep_cluster_address="gcomm://galera-cluster"
+    # wsrep_cluster_address="gcomm://galera-0:4567,galera-1:4567,galera-2:4567"
 
     # Galera Synchronization Configuration
     wsrep_sst_method=rsync
@@ -128,6 +128,8 @@ spec:
             value: R00t_10
           - name: MYSQL_DATABASE
             value: galera
+          - name: MYSQL_INITDB_SKIP_TZINFO
+            value: "yes"
         volumeMounts:
         - name: galera-data
           mountPath: /galera_data
