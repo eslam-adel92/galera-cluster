@@ -54,9 +54,12 @@ data:
     wsrep_on=ON
     wsrep_provider=/usr/lib/galera/libgalera_smm.so
 
+    wsrep_debug=on
+
     # Galera Cluster Configuration
     wsrep_cluster_name="galera_cluster"
-    wsrep_cluster_address="gcomm://galera-cluster"
+    # wsrep_cluster_address="gcomm://galera-cluster"
+    wsrep_cluster_address="gcomm://galera-0:4567,galera-1:4567,galera-2:4567"
 
     # Galera Synchronization Configuration
     wsrep_sst_method=rsync
@@ -129,7 +132,9 @@ spec:
         - name: galera-data
           mountPath: /galera_data
         - name: galera-config-vol
-          mountPath: /etc/mysql/conf.d
+          # mountPath: /etc/mysql/conf.d
+          mountPath: /etc/mysql
+
         livenessProbe:
           exec:
             command: ["mysqladmin", "ping"]
@@ -145,10 +150,6 @@ spec:
             - "-c"
             - set -ex
               /readiness.sh
-            # - /bin/bash /usr/bin/mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
-            # - -c
-            # - set -ex
-            #   /usr/bin/mysql -u root --password=$MYSQL_ROOT_PASSWORD -e "SHOW GLOBAL STATUS LIKE 'wsrep_ready';"
           initialDelaySeconds: 50
           periodSeconds: 20
           timeoutSeconds: 100
@@ -160,7 +161,7 @@ spec:
           name: galera-config
           items:
           - key: config
-            path: galera.cnf
+            path: my.cnf
 
   volumeClaimTemplates:
   - metadata:
